@@ -2,6 +2,44 @@ import type { LanguageModelV3StreamPart, LanguageModelV3Usage, LanguageModelV3Fi
 
 type RawEvent = Record<string, unknown> & { type: string }
 
+/**
+ * Wrap an SSE error payload (which may be a plain object like
+ * `{ type: "server_error", message: "Network connection lost." }`, a string,
+ * or an Error) into a real Error so it terminates the ReadableStream via
+ * controller.error(). The original object is preserved on `ccError` and the
+ * type is exposed as `code` so downstream retry logic can classify it.
+ */
+function wrapError(err: unknown): Error {
+  if (err instanceof Error) return err
+  if (typeof err === "string") {
+    const e = new Error(err)
+    return e
+  }
+  if (err && typeof err === "object") {
+    const e = err as Record<string, unknown>
+    const nested = e.error as Record<string, unknown> | undefined
+    const message =
+      (typeof e.message === "string" && e.message) ||
+      (typeof nested?.message === "string" && nested.message) ||
+      (typeof e.msg === "string" && e.msg) ||
+      (() => {
+        try {
+          return JSON.stringify(err)
+        } catch {
+          return "Unknown error"
+        }
+      })()
+    const type =
+      (typeof e.type === "string" && e.type) ||
+      (typeof nested?.type === "string" && nested.type) ||
+      undefined
+    const error = new Error(type ? `${type}: ${message}` : String(message))
+    Object.assign(error, { ccError: err, ...(type ? { code: type } : {}) })
+    return error
+  }
+  return new Error(String(err ?? "Unknown error"))
+}
+
 function mapFinishReason(raw: string): LanguageModelV3FinishReason["unified"] {
   switch (raw) {
     case "stop":
@@ -101,8 +139,13 @@ function toStreamPart(event: RawEvent): LanguageModelV3StreamPart | null {
         modelId: event.modelId as string | undefined,
       }
 
+    // NOTE: `error` is intentionally NOT mapped to a stream part here.
+    // SSE error events are converted into ReadableStream terminations via
+    // controller.error() in parseStreamEvents() so the AI SDK and the retry
+    // wrapper in model.ts see a real failure (with the original error object
+    // preserved on err.ccError) instead of a silent part.
     case "error":
-      return { type: "error", error: event.error ?? event.message ?? "Unknown error" }
+      return null
 
     default:
       return null
@@ -147,6 +190,13 @@ export function parseStreamEvents(body: ReadableStream<Uint8Array>): ReadableStr
 
             if (typeof parsed !== "object" || parsed === null || typeof parsed.type !== "string") continue
 
+            // SSE-level error: terminate the stream with a real Error so the
+            // retry layer can classify it. Preserve the original payload.
+            if (parsed.type === "error") {
+              controller.error(wrapError(parsed.error ?? parsed.message ?? "Unknown Command Code stream error"))
+              return
+            }
+
             const part = toStreamPart(parsed)
             if (part) controller.enqueue(part)
           }
@@ -162,6 +212,10 @@ export function parseStreamEvents(body: ReadableStream<Uint8Array>): ReadableStr
                 try {
                   const parsed = JSON.parse(jsonStr)
                   if (typeof parsed === "object" && parsed !== null && typeof parsed.type === "string") {
+                    if (parsed.type === "error") {
+                      controller.error(wrapError(parsed.error ?? parsed.message ?? "Unknown Command Code stream error"))
+                      return
+                    }
                     const part = toStreamPart(parsed)
                     if (part) controller.enqueue(part)
                   }
@@ -177,8 +231,9 @@ export function parseStreamEvents(body: ReadableStream<Uint8Array>): ReadableStr
           buffer += decoder.decode(value, { stream: true })
         }
       } catch (err) {
-        controller.enqueue({ type: "error", error: err })
-        controller.close()
+        // Network/read-level failure: terminate the stream with the real error
+        // so the retry layer can decide whether to reconnect.
+        controller.error(wrapError(err))
       }
     },
     cancel() {

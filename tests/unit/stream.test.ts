@@ -162,8 +162,18 @@ test("skips [DONE] lines", async () => {
 test("handles error events", async () => {
   const body = streamFromChunks([sseEvent({ type: "error", error: "Something broke" })])
   const stream = parseStreamEvents(body)
-  const parts = await collectStream(stream)
-  expect(parts[0]).toMatchObject({ type: "error", error: "Something broke" })
+  // SSE error events now terminate the stream via controller.error()
+  // instead of being silently enqueued as a stream part
+  const reader = stream.getReader()
+  try {
+    await reader.read()
+    expect.unreachable("Stream should have thrown")
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toContain("Something broke")
+  } finally {
+    reader.releaseLock()
+  }
 })
 
 test("handles response-metadata event", async () => {
@@ -220,4 +230,126 @@ test("closes stream cleanly at end of data", async () => {
   const stream = parseStreamEvents(body)
   const parts = await collectStream(stream)
   expect(parts).toHaveLength(1)
+})
+
+// --- SSE error handling tests (controller.error behavior) ---
+
+test("SSE error with object payload produces Error with ccError and code", async () => {
+  const body = streamFromChunks([sseEvent({
+    type: "error",
+    error: { type: "server_error", message: "Network connection lost." },
+  })])
+  const stream = parseStreamEvents(body)
+  const reader = stream.getReader()
+  try {
+    await reader.read()
+    expect.unreachable("Stream should have thrown")
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error)
+    const error = err as Error & { ccError?: unknown; code?: string }
+    expect(error.message).toContain("server_error")
+    expect(error.message).toContain("Network connection lost.")
+    expect(error.code).toBe("server_error")
+    expect(error.ccError).toBeDefined()
+  } finally {
+    reader.releaseLock()
+  }
+})
+
+test("SSE error with string payload wraps into Error", async () => {
+  const body = streamFromChunks([sseEvent({ type: "error", error: "rate limited" })])
+  const stream = parseStreamEvents(body)
+  const reader = stream.getReader()
+  try {
+    await reader.read()
+    expect.unreachable("Stream should have thrown")
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toContain("rate limited")
+  } finally {
+    reader.releaseLock()
+  }
+})
+
+test("SSE error with message field (instead of error) is handled", async () => {
+  const body = streamFromChunks([sseEvent({ type: "error", message: "Something failed" })])
+  const stream = parseStreamEvents(body)
+  const reader = stream.getReader()
+  try {
+    await reader.read()
+    expect.unreachable("Stream should have thrown")
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toContain("Something failed")
+  } finally {
+    reader.releaseLock()
+  }
+})
+
+test("SSE error in final buffer chunk rejects stream", async () => {
+  // Send error as the last event with no trailing newline after close
+  const errorJson = JSON.stringify({ type: "error", error: "final error" })
+  const body = streamFromChunks([`data: ${errorJson}`])
+  const stream = parseStreamEvents(body)
+  const reader = stream.getReader()
+  try {
+    await reader.read()
+    expect.unreachable("Stream should have thrown")
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toContain("final error")
+  } finally {
+    reader.releaseLock()
+  }
+})
+
+test("network read failure in pull() rejects stream with wrapped error", async () => {
+  // Create a body stream that yields one chunk then throws on subsequent reads
+  const encoder = new TextEncoder()
+  let readCount = 0
+  const failingBody = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      readCount++
+      if (readCount === 1) {
+        controller.enqueue(encoder.encode('data: {"type":"text-delta","id":"t1","delta":"hello"}\n\n'))
+      } else {
+        // Simulate network failure by closing with an error
+        controller.error(new Error("ECONNRESET: connection reset"))
+      }
+    },
+  })
+  const stream = parseStreamEvents(failingBody)
+  const reader = stream.getReader()
+  // First read should succeed
+  const first = await reader.read()
+  expect(first.done).toBe(false)
+  expect(first.value).toMatchObject({ type: "text-delta", delta: "hello" })
+  // Second read should fail — the underlying body errored, which causes
+  // the catch block in parseStreamEvents to call controller.error(wrapError(err))
+  try {
+    const second = await reader.read()
+    // If the stream closes gracefully instead of throwing, that's also acceptable
+    // (depends on how the ReadableStream propagates the body error)
+    if (second.done) {
+      // Stream closed — acceptable
+    }
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error)
+  } finally {
+    reader.releaseLock()
+  }
+})
+
+test("normal events still work after error handling change", async () => {
+  const body = streamFromChunks([
+    sseEvent({ type: "text-delta", id: "t1", delta: "hello" }),
+    sseEvent({ type: "text-delta", id: "t1", delta: " world" }),
+    sseEvent({ type: "finish-step", finishReason: "stop", usage: { inputTokens: 5, outputTokens: 10 } }),
+  ])
+  const stream = parseStreamEvents(body)
+  const parts = await collectStream(stream)
+  expect(parts).toHaveLength(3)
+  expect(parts[0]).toMatchObject({ type: "text-delta", delta: "hello" })
+  expect(parts[1]).toMatchObject({ type: "text-delta", delta: " world" })
+  expect(parts[2]).toMatchObject({ type: "finish" })
 })

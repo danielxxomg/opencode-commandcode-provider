@@ -1,5 +1,18 @@
-import { expect, test, beforeAll, afterAll } from "bun:test"
-import { createCommandCode } from "../../index.js"
+import { expect, test, beforeAll, afterAll, mock } from "bun:test"
+import * as realFs from "node:fs"
+
+// Mock fs so existsSync returns false — prevents reading real ~/.commandcode/auth.json
+// Only affects tests that expect "no key found" behavior; tests with explicit apiKey bypass fs entirely
+mock.module("fs", () => ({
+  existsSync: (p: string) => {
+    // Only intercept auth file paths; let other paths use real fs
+    if (typeof p === "string" && (p.includes(".commandcode") || p.includes(".pi"))) return false
+    return realFs.existsSync(p)
+  },
+  readFileSync: realFs.readFileSync.bind(realFs),
+}))
+
+const { createCommandCode } = await import("../../index.js")
 
 let originalEnv: Record<string, string | undefined> = {}
 beforeAll(() => {
