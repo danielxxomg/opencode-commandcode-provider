@@ -1,10 +1,10 @@
 {
   "name": "commandcode-go-opencode-provider",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "author": "Brent Weatherall",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/brent-weatherall/opencode-commandcode-provider.git"
+    "url": "git+https://github.com/danielxxomg/opencode-commandcode-provider.git"
   },
   "main": "index.ts",
   "devDependencies": {
