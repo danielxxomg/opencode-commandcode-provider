@@ -10,7 +10,9 @@ interface ModelEntry {
   tier: "premium" | "open-source"
   reasoning: boolean
   tool_call: boolean
-  cost: { input: number; output: number; cache_read?: number; cache_write?: number }
+  capabilities?: Record<string, unknown>
+  variants?: Record<string, unknown>
+  cost: { input: number; output: number; cache_read?: number; cache_write?: number; cache?: { read: number; write: number } }
   limit: { context: number; output: number }
 }
 
@@ -43,19 +45,33 @@ export default async function commandcodePlugin() {
         const models = loadModels()
         const modelsObj: Record<string, unknown> = {}
         for (const entry of models) {
-          const key = toConfigKey(entry.id)
-          const costObj: Record<string, number> = { input: entry.cost.input, output: entry.cost.output }
-          if (entry.cost.cache_read !== undefined) costObj.cache_read = entry.cost.cache_read
-          if (entry.cost.cache_write !== undefined) costObj.cache_write = entry.cost.cache_write
+          const shortKey = toConfigKey(entry.id)
+          const fullKey = entry.id.toLowerCase()
+          const hyphenKey = entry.id.toLowerCase().replace(/\//g, "-")
 
-          modelsObj[key] = {
+          const costObj: Record<string, unknown> = {
+            input: entry.cost.input,
+            output: entry.cost.output,
+            cache: entry.cost.cache ?? {
+              read: entry.cost.cache_read ?? 0,
+              write: entry.cost.cache_write ?? 0,
+            },
+          }
+
+          const modelDef: Record<string, unknown> = {
             id: entry.id,
             name: entry.name,
             reasoning: entry.reasoning,
             tool_call: entry.tool_call,
+            capabilities: entry.capabilities,
+            variants: entry.variants,
             cost: costObj,
             limit: entry.limit,
           }
+
+          modelsObj[shortKey] = modelDef
+          modelsObj[fullKey] = modelDef
+          modelsObj[hyphenKey] = modelDef
         }
         cc.models = modelsObj
       }
