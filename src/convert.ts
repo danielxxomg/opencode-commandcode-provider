@@ -8,6 +8,7 @@ import type {
   LanguageModelV3ToolResultPart,
   LanguageModelV3ToolResultOutput,
 } from "@ai-sdk/provider"
+import type { ProjectContext } from "./context.js"
 
 type CCMessage =
   | { role: "user"; content: string | unknown[] }
@@ -59,6 +60,8 @@ interface CCRequestEnvelope {
     temperature?: number
     top_p?: number
     top_k?: number
+    thinking?: unknown
+    reasoning_effort?: string
   }
 }
 
@@ -174,6 +177,7 @@ function convertTools(
 export function buildRequest(
   modelId: string,
   options: LanguageModelV3CallOptions,
+  context?: ProjectContext,
 ): CCRequestEnvelope {
   let systemPrompt = ""
   const messages: CCMessage[] = []
@@ -200,21 +204,30 @@ export function buildRequest(
   if (options.topP !== undefined) params.top_p = options.topP
   if (options.topK !== undefined) params.top_k = options.topK
 
+  const opt = options as Record<string, unknown>
+  const providerOpts =
+    (opt.providerMetadata as Record<string, Record<string, unknown>> | undefined)?.commandcode ??
+    (opt.providerOptions as Record<string, Record<string, unknown>> | undefined)?.commandcode
+
+  if (providerOpts?.thinking) {
+    params.thinking = providerOpts.thinking
+  } else if (typeof opt.reasoningEffort === "string") {
+    params.reasoning_effort = opt.reasoningEffort
+  }
+
   return {
     config: {
       workingDir: process.cwd() ?? "/",
       date: new Date().toISOString().split("T")[0] ?? "",
       environment: `${process.platform}-${process.arch}`,
-      // Stub: opencode does not expose project structure context
-      structure: [],
-      isGitRepo: false,
-      currentBranch: "",
-      mainBranch: "",
-      gitStatus: "",
-      recentCommits: [],
+      structure: context?.structure ?? [],
+      isGitRepo: context?.git.isGitRepo ?? false,
+      currentBranch: context?.git.currentBranch ?? "",
+      mainBranch: context?.git.mainBranch ?? "",
+      gitStatus: context?.git.gitStatus ?? "",
+      recentCommits: context?.git.recentCommits ?? [],
     },
     memory: "",
-    // Stub: taste/memory/permissionMode are Command Code CLI features not exposed via provider API
     taste: "",
     skills: null,
     permissionMode: "standard",

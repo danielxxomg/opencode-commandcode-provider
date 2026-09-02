@@ -12,6 +12,6 @@
     "outDir": "dist",
     "declaration": true
   },
-  "include": ["index.ts", "plugin.ts", "src/**/*.ts"],
+  "include": ["index.ts", "plugin.ts", "v2.ts", "src/**/*.ts"],
   "exclude": ["scripts/", "tests/"]
 }

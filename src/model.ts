@@ -9,6 +9,7 @@ import type {
   LanguageModelV3StreamPart,
 } from "@ai-sdk/provider"
 import { buildRequest } from "./convert.js"
+import { gatherContext } from "./context.js"
 import { parseStreamEvents } from "./stream.js"
 
 const DEFAULT_BASE_URL = "https://api.commandcode.ai"
@@ -121,7 +122,7 @@ function isRetryableStatus(status: number): boolean {
 }
 
 function backoffDelay(attempt: number): number {
-  const base = BACKOFF_SCHEDULE_MS[Math.min(attempt, BACKOFF_SCHEDULE_MS.length - 1)]
+  const base = BACKOFF_SCHEDULE_MS[Math.min(attempt, BACKOFF_SCHEDULE_MS.length - 1)] ?? 5000
   // jitter ±25% to avoid synchronized retry storms
   return base * (0.75 + Math.random() * 0.5)
 }
@@ -415,7 +416,8 @@ export class CommandCodeLanguageModel implements LanguageModelV3 {
   }
 
   async doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> {
-    const body = buildRequest(this.modelId, options)
+    const context = gatherContext()
+    const body = buildRequest(this.modelId, options, context)
     const requestBody = JSON.stringify(body)
 
     const controller = new AbortController()

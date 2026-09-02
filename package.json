@@ -1,7 +1,7 @@
 {
   "name": "commandcode-go-opencode-provider",
-  "version": "0.4.1",
-  "author": "Brent Weatherall",
+  "version": "0.5.0",
+  "author": "Brent Weatherall, danielxxomg",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/danielxxomg/opencode-commandcode-provider.git"
@@ -18,15 +18,18 @@
     },
     "./server": {
       "import": "./plugin.ts"
+    },
+    "./v2": {
+      "import": "./v2.ts"
     }
   },
   "bugs": {
-    "url": "https://github.com/brent-weatherall/opencode-commandcode-provider/issues"
+    "url": "https://github.com/danielxxomg/opencode-commandcode-provider/issues"
   },
-  "description": "Command Code API provider for opencode — use Claude, GPT, Gemini, DeepSeek, Qwen, Kimi, GLM, MiniMax, and Step models via Command Code",
+  "description": "Command Code API provider for opencode — use Claude, GPT, Gemini, DeepSeek, Qwen, Kimi, GLM, MiniMax, and Step models via Command Code with auto-discovery and OpenCode 2 support",
   "engines": { "bun": ">=1.0.0" },
-  "files": ["index.ts", "plugin.ts", "models.json", "src/"],
-  "homepage": "https://github.com/brent-weatherall/opencode-commandcode-provider#readme",
+  "files": ["index.ts", "plugin.ts", "v2.ts", "models.json", "src/"],
+  "homepage": "https://github.com/danielxxomg/opencode-commandcode-provider#readme",
   "keywords": [
     "opencode",
     "opencode-provider",

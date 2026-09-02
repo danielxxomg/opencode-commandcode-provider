@@ -225,3 +225,36 @@ test("envelope has correct top-level shape", () => {
   expect(req).toHaveProperty("permissionMode", "standard")
   expect(req).toHaveProperty("params")
 })
+
+test("passes through project context structure and git state", () => {
+  const req = buildRequest("m", makeOpts(), {
+    structure: ["src/", "src/index.ts"],
+    git: {
+      isGitRepo: true,
+      currentBranch: "feature-branch",
+      mainBranch: "main",
+      gitStatus: "M src/index.ts",
+      recentCommits: ["abc1234 initial"],
+    },
+  })
+  expect(req.config.structure).toEqual(["src/", "src/index.ts"])
+  expect(req.config.isGitRepo).toBe(true)
+  expect(req.config.currentBranch).toBe("feature-branch")
+  expect(req.config.gitStatus).toBe("M src/index.ts")
+})
+
+test("passes through thinking and reasoning_effort options", () => {
+  const req1 = buildRequest("m", makeOpts({
+    providerMetadata: {
+      commandcode: {
+        thinking: { type: "enabled", budget_tokens: 4096 },
+      },
+    },
+  } as any))
+  expect(req1.params.thinking).toEqual({ type: "enabled", budget_tokens: 4096 })
+
+  const req2 = buildRequest("m", makeOpts({
+    reasoningEffort: "high",
+  } as any))
+  expect(req2.params.reasoning_effort).toBe("high")
+})
