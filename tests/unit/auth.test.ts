@@ -1,5 +1,16 @@
-import { expect, test, beforeEach } from "bun:test"
-import { resolveApiKey } from "../../src/auth.js"
+import { expect, test, beforeEach, mock, afterAll } from "bun:test"
+import * as realFs from "node:fs"
+
+// Mock fs so existsSync returns false for auth paths — prevents reading real ~/.commandcode/auth.json
+mock.module("fs", () => ({
+  existsSync: (p: string) => {
+    if (typeof p === "string" && (p.includes(".commandcode") || p.includes(".pi"))) return false
+    return realFs.existsSync(p)
+  },
+  readFileSync: realFs.readFileSync.bind(realFs),
+}))
+
+const { resolveApiKey } = await import("../../src/auth.js")
 
 beforeEach(() => {
   delete process.env.COMMANDCODE_API_KEY
