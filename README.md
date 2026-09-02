@@ -1,9 +1,47 @@
 # commandcode-go-opencode-provider
 
-[Command Code](https://commandcode.ai) API provider for [opencode](https://opencode.ai). Use Claude, GPT, Gemini, DeepSeek, Qwen, Kimi, GLM, MiniMax, Step, and other models through a single API key.
+[![Version](https://img.shields.io/badge/release-v0.5.0-blue.svg)](https://github.com/danielxxomg/opencode-commandcode-provider/releases/tag/v0.5.0)
+[![Tests](https://img.shields.io/badge/tests-106%20passed-brightgreen.svg)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)]()
+[![OpenCode](https://img.shields.io/badge/OpenCode-v1%20%26%20v2-orange.svg)]()
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-> **This fork** adds production-grade retry/backoff, SSE error propagation, and
-> key rotation on top of the [original by @brent-weatherall](https://github.com/brent-weatherall/opencode-commandcode-provider).
+[Command Code](https://commandcode.ai) API provider for [opencode](https://opencode.ai). Access Claude, GPT, Gemini, DeepSeek, Qwen, Kimi, GLM, MiniMax, and 67+ models through a single API key with real-time model discovery and robust error recovery.
+
+> **Maintained Fork**: This repository is the actively maintained fork of [`brent-weatherall/opencode-commandcode-provider`](https://github.com/brent-weatherall/opencode-commandcode-provider), adding OpenCode 2 support, runtime auto-discovery, Plan Mode context gathering, and production-grade retry resilience.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    OpenCode Client (v1 / v2)               │
+└──────────────┬──────────────────────────────┬───────────────┘
+               │ (1) Startup Discovery        │ (2) Streaming Request
+               ▼                              ▼
+┌──────────────────────────────┐   ┌──────────────────────────┐
+│     Auto-Discovery Engine    │   │      Execution Layer     │
+│  - GET /provider/v1/models   │   │  - Project tree & Git ctx│
+│  - Bundled 67-model fallback │   │  - Retry with jitter     │
+│  - Zero credentials needed   │   │  - SSE error propagation │
+└──────────────┬───────────────┘   └──────────┬───────────────┘
+               │                              │
+               └──────────────┬───────────────┘
+                              ▼
+               ┌──────────────────────────────┐
+               │    Command Code Cloud API    │
+               └──────────────────────────────┘
+```
+
+## Feature Comparison
+
+| Feature | Upstream (Abandoned) | danielxxomg Fork (v0.5.0) |
+|---|---|---|
+| **Model Count** | 21 static models | **67 verified models** |
+| **Model Discovery** | Manual compile | **Real-time API auto-discovery** at startup |
+| **OpenCode 2 Support** | ❌ Broken (`SchemaError`) | ✅ **Native `./v2` entrypoint** |
+| **Plan Mode Context** | ❌ Empty stubs | ✅ **File tree + Git context** with 30s cache |
+| **Retry & Backoff** | ❌ Naive exponential | ✅ **Fixed schedule with jitter & classification** |
+| **Stream Termination** | ❌ Silent SSE errors | ✅ **Clean `controller.error()` termination** |
+| **Reasoning Effort** | ❌ Unsupported | ✅ **Configurable thinking levels (`low` to `max`)** |
+| **Test Suite** | 43 tests | **106 unit tests (100% passing)** |
 
 ## What this fork adds (v0.5.0)
 
